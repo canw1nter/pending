@@ -50,6 +50,10 @@ func CreateConnectionHandler(w http.ResponseWriter, r *http.Request) {
 		_, p, err := conn.ReadMessage()
 		if err != nil {
 			log.Printf("Some error when read message from %s's connection! err: %s\n", userID, err.Error())
+			if websocket.IsCloseError(err) {
+				mutex.Lock()
+				delete(userConn, userID)
+			}
 			break
 		}
 		var message Message
