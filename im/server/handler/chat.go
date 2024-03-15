@@ -53,6 +53,7 @@ func CreateConnectionHandler(w http.ResponseWriter, r *http.Request) {
 			if websocket.IsCloseError(err) {
 				mutex.Lock()
 				delete(userConn, userID)
+				mutex.Unlock()
 			}
 			break
 		}
