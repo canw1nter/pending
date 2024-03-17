@@ -3,9 +3,9 @@ package handler
 import (
 	"encoding/json"
 	"log"
-	"net/http"
 	"sync"
 
+	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 )
 
@@ -28,47 +28,50 @@ type Message struct {
 	FromUserID string `json:"from_user_id"`
 }
 
-func CreateConnectionHandler(w http.ResponseWriter, r *http.Request) {
-	userID := r.Header.Get("ID")
+func createWebSocketConnectionHandler(c *gin.Context) {
+	userID := c.GetString("uuid")
 	if userID == "" {
-		log.Printf("Identify failed")
+		log.Printf("Identify failed\n")
 		return
 	}
 
-	conn, err := upgrader.Upgrade(w, r, nil)
+	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		log.Printf("Can't create connection to %s! err: %s\n", userID, err.Error())
 		return
 	}
-	defer conn.Close()
+
 	mutex.Lock()
 	userConn[userID] = conn
 	mutex.Unlock()
-	log.Printf("Connect to %s successfully!", userID)
+	log.Printf("Connect to %s successfully!\n", userID)
 
-	for {
-		_, p, err := conn.ReadMessage()
-		if err != nil {
-			log.Printf("Some error when read message from %s's connection! err: %s\n", userID, err.Error())
-			if websocket.IsCloseError(err) {
-				mutex.Lock()
-				delete(userConn, userID)
-				mutex.Unlock()
+	go func() {
+		defer conn.Close()
+		for {
+			_, p, err := conn.ReadMessage()
+			if err != nil {
+				log.Printf("Some error when read message from %s's connection! err: %s\n", userID, err.Error())
+				if websocket.IsCloseError(err) {
+					mutex.Lock()
+					delete(userConn, userID)
+					mutex.Unlock()
+				}
+				break
 			}
-			break
-		}
-		var message Message
-		if err = json.Unmarshal(p, &message); err != nil {
-			log.Printf("Some error when decode message from %s! err: %s\n", userID, err.Error())
-			continue
-		}
+			var message Message
+			if err = json.Unmarshal(p, &message); err != nil {
+				log.Printf("Some error when decode message from %s! err: %s\n", userID, err.Error())
+				continue
+			}
 
-		if sendConn, ok := userConn[message.ToUserID]; ok {
-			if err = sendConn.WriteMessage(websocket.BinaryMessage, p); err != nil {
-				log.Printf("User %s send message to %s failed! err: %s\n",
-					message.FromUserID, message.ToUserID, err.Error())
-				return
+			if sendConn, ok := userConn[message.ToUserID]; ok {
+				if err = sendConn.WriteMessage(websocket.BinaryMessage, p); err != nil {
+					log.Printf("User %s send message to %s failed! err: %s\n",
+						message.FromUserID, message.ToUserID, err.Error())
+					return
+				}
 			}
 		}
-	}
+	}()
 }

@@ -1,12 +1,21 @@
 package main
 
 import (
-	"net/http"
+	"log"
+
+	"github.com/gin-gonic/gin"
 
 	"pending/im/server/handler"
 )
 
 func main() {
-	http.HandleFunc("/online", handler.CreateConnectionHandler)
-	_ = http.ListenAndServe(":8001", nil)
+	server := gin.Default()
+
+	handler.RegisterRoute(server)
+
+	err := server.Run(":8001")
+	if err != nil {
+		log.Fatalf("Start server failed! err: %s\n", err.Error())
+		return
+	}
 }
